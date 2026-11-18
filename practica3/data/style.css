@@ -1,0 +1,174 @@
+/* style.css  –  Práctica 3: Estilos del panel de control */
+
+:root {
+  --bg:        #0d0d1a;
+  --panel:     #13132b;
+  --btn:       #1c1c40;
+  --acento:    #3d5afe;
+  --activo:    #f50057;
+  --verde:     #00e676;
+  --amarillo:  #ffea00;
+  --rojo:      #ff1744;
+  --texto:     #e8eaf6;
+  --gris:      #78909c;
+  /* En pantallas muy angostas (320 px) los botones se reducen */
+  --btn-sz:    min(90px, 27vw);
+  --gap:       12px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0;
+    -webkit-tap-highlight-color: transparent; }
+
+body {
+  background: var(--bg);
+  color: var(--texto);
+  font-family: 'Segoe UI', Arial, sans-serif;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1rem;
+  gap: 1rem;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* ── Encabezado ─────────────────────────────────────────────────── */
+header { width: 100%; max-width: 400px; }
+
+.header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.4rem;
+}
+h1 { font-size: 1.5rem; }
+
+/* ── Barra de batería ───────────────────────────────────────────── */
+#bat-bar-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #222;
+  border-radius: 8px;
+  padding: 4px 8px;
+  margin-bottom: 0.4rem;
+}
+/* La pista es la que crece con flex; la barra interior usa width (%).
+   (Si flex:1 se pone en la barra, el width que asigna app.js se ignora
+   y la barra siempre aparece llena.) */
+#bat-track {
+  flex: 1;
+  height: 10px;
+  border-radius: 5px;
+  background: #333;
+  overflow: hidden;
+}
+#bat-bar {
+  height: 100%;
+  width: 0%;
+  border-radius: 5px;
+  background: var(--verde);
+  transition: width 0.5s, background 0.5s;
+}
+#bat-txt { font-size: 0.75rem; color: var(--gris); min-width: 70px; text-align: right; }
+
+/* ── Indicador de conexión ──────────────────────────────────────── */
+.status { font-size: 0.85rem; }
+.status.on  { color: var(--verde); }
+.status.off { color: var(--rojo); }
+
+/* ── Área principal ─────────────────────────────────────────────── */
+main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  width: 100%;
+}
+
+/* ── Cuadrícula de control 3×3 ──────────────────────────────────── */
+.grid-ctrl {
+  display: grid;
+  grid-template-columns: repeat(3, var(--btn-sz));
+  grid-template-rows:    repeat(3, var(--btn-sz));
+  gap: var(--gap);
+}
+
+/* ── Estilo base de botones ─────────────────────────────────────── */
+.btn-dir, .btn-stop, .btn-spin {
+  border: none;
+  border-radius: 14px;
+  cursor: pointer;
+  font-size: 2rem;
+  color: var(--texto);
+  transition: background 0.12s, transform 0.08s, box-shadow 0.12s, opacity 0.2s;
+  /* Evitar zoom, desplazamiento y menú contextual al mantener presionado */
+  touch-action: none;
+  -webkit-touch-callout: none;
+}
+.btn-dir:disabled, .btn-stop:disabled, .btn-spin:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.btn-dir {
+  width:  var(--btn-sz);
+  height: var(--btn-sz);
+  background: var(--btn);
+  border: 2px solid var(--acento);
+}
+.btn-dir.activo {
+  background: var(--activo);
+  transform: scale(0.93);
+  box-shadow: 0 0 16px var(--activo);
+}
+
+.btn-stop {
+  width:  var(--btn-sz);
+  height: var(--btn-sz);
+  background: #400;
+  border: 2px solid var(--rojo);
+  font-size: 1.8rem;
+}
+.btn-stop:active:not(:disabled) { background: var(--rojo); transform: scale(0.93); }
+
+.btn-spin {
+  width: calc(3 * var(--btn-sz) + 2 * var(--gap));
+  height: 56px;
+  background: var(--panel);
+  border: 2px solid var(--gris);
+  font-size: 1rem;
+  letter-spacing: 0.05em;
+}
+.btn-spin.activo {
+  background: var(--acento);
+  border-color: var(--acento);
+  transform: scale(0.97);
+}
+
+/* ── Movimiento confirmado por el robot ─────────────────────────── */
+.movimiento { font-size: 0.95rem; color: var(--gris); min-height: 1.3em; }
+
+/* ── Alerta de sistema (batería baja, etc.) ─────────────────────── */
+.alerta {
+  width: 100%;
+  max-width: 340px;
+  background: #5d1a00;
+  color: var(--amarillo);
+  border: 1px solid var(--amarillo);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 0.85rem;
+  text-align: center;
+}
+.alerta.oculto { display: none; }
+
+footer { color: var(--gris); font-size: 0.7rem; margin-top: auto; }
+
+/* ── Responsive: botones más grandes en pantallas grandes ──────── */
+@media (min-width: 480px) {
+  :root { --btn-sz: 120px; --gap: 16px; }
+  .btn-dir, .btn-stop { font-size: 2.6rem; }
+  .btn-spin { height: 68px; font-size: 1.1rem; }
+}

@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<!-- data/index.html  –  Práctica 3: Interfaz completa del Robot -->
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Robot ESP32</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <div class="header-top">
+      <h1>Robot ESP32</h1>
+      <span id="bat-icon" title="Batería">🔋</span>
+    </div>
+    <div id="bat-bar-wrap">
+      <!-- La pista ocupa el espacio disponible; la barra interior
+           cambia de ancho según el nivel de batería -->
+      <div id="bat-track"><div id="bat-bar"></div></div>
+      <span id="bat-txt">– V</span>
+    </div>
+    <p id="status" class="status off">● Desconectado</p>
+  </header>
+
+  <main>
+    <!-- Panel de dirección 3×3 (deshabilitado hasta conectar) -->
+    <div class="grid-ctrl">
+      <div></div>
+      <button class="btn-dir" data-cmd="F" aria-label="Adelante" disabled>▲</button>
+      <div></div>
+      <button class="btn-dir" data-cmd="L" aria-label="Izquierda" disabled>◄</button>
+      <button class="btn-stop" data-cmd="S" aria-label="Detener" disabled>■</button>
+      <button class="btn-dir" data-cmd="R" aria-label="Derecha" disabled>►</button>
+      <div></div>
+      <button class="btn-dir" data-cmd="B" aria-label="Atrás" disabled>▼</button>
+      <div></div>
+    </div>
+    <!-- Botón de giro en punto -->
+    <button class="btn-spin" data-cmd="P" disabled>↺ Giro en punto</button>
+
+    <!-- Movimiento confirmado por el robot -->
+    <p id="movimiento" class="movimiento">–</p>
+
+    <!-- Alerta de sistema -->
+    <div id="alerta" class="alerta oculto"></div>
+  </main>
+
+  <footer>
+    <small>ISC – Robot Diferencial ESP32 · Práctica 3</small>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
