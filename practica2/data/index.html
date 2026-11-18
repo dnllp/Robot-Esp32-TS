@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<!--
+  data/index.html  –  Práctica 2: Control de Motores
+  Guardar este archivo en la carpeta /data del sketch de Arduino.
+  Cargarlo al ESP32 (Arduino IDE 2.x) con:
+    Ctrl+Shift+P → "Upload LittleFS to Pico/ESP8266/ESP32"
+  (Cerrar el Monitor Serial antes de subir.)
+
+  Uso:
+    - Mantener presionado un botón para mover el robot;
+      al soltarlo, el robot se detiene.
+    - En computadora también funcionan las flechas del teclado
+      (o W A S D), Q para girar en su eje y Espacio para detener.
+-->
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Control de Motores – ESP32 Práctica 2</title>
+  <style>
+    /* ── Variables de color ──────────────────────────────────────── */
+    :root {
+      --bg:       #1a1a2e;
+      --card:     #16213e;
+      --boton:    #0f3460;
+      --activo:   #4caf50;
+      --verde:    #4caf50;
+      --rojo:     #f44336;
+      --texto:    #eaeaea;
+      --gris:     #999;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--texto);
+      font-family: 'Segoe UI', Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 2rem 1rem;
+    }
+
+    h1 { font-size: 1.8rem; margin-bottom: 0.5rem; }
+
+    /* ── Indicador de conexión WebSocket ────────────────────────── */
+    #conexion {
+      font-size: 0.9rem;
+      color: var(--rojo);
+      margin-bottom: 1.5rem;
+      transition: color 0.3s;
+    }
+    #conexion.ok { color: var(--verde); }
+
+    /* ── Tarjeta de control ─────────────────────────────────────── */
+    .card {
+      background: var(--card);
+      border-radius: 16px;
+      padding: 1.5rem;
+      text-align: center;
+      width: 100%;
+      max-width: 340px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    }
+
+    /* ── Cruceta de movimiento (3 × 3) ──────────────────────────── */
+    .cruceta {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.6rem;
+      margin-bottom: 0.6rem;
+    }
+
+    button {
+      aspect-ratio: 1;
+      font-size: 2rem;
+      font-weight: bold;
+      color: white;
+      background: var(--boton);
+      border: none;
+      border-radius: 14px;
+      cursor: pointer;
+      transition: transform 0.1s, background 0.15s, opacity 0.2s;
+      /* Evitar zoom, selección y menú contextual al mantener presionado */
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+    }
+    button.activo {
+      background: var(--activo);
+      transform: scale(0.95);
+      box-shadow: 0 0 18px rgba(76,175,80,0.6);
+    }
+    button:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    #btn-stop { background: var(--rojo); font-size: 1.6rem; }
+
+    #btn-eje {
+      width: 100%;
+      aspect-ratio: auto;
+      padding: 14px;
+      font-size: 1.1rem;
+    }
+
+    .vacio { visibility: hidden; }
+
+    /* ── Estado textual ─────────────────────────────────────────── */
+    #estado {
+      margin-top: 1.2rem;
+      font-size: 1.05rem;
+      min-height: 1.4em;
+    }
+    #ayuda {
+      margin-top: 0.6rem;
+      font-size: 0.8rem;
+      color: var(--gris);
+    }
+  </style>
+</head>
+<body>
+  <h1>Control de Motores</h1>
+  <p id="conexion">● Conectando...</p>
+
+  <div class="card">
+    <div class="cruceta">
+      <span class="vacio"></span>
+      <button data-cmd="F" title="Avanzar"  disabled>▲</button>
+      <span class="vacio"></span>
+
+      <button data-cmd="L" title="Girar a la izquierda" disabled>◀</button>
+      <button id="btn-stop" data-cmd="S" title="Detener" disabled>■</button>
+      <button data-cmd="R" title="Girar a la derecha"   disabled>▶</button>
+
+      <span class="vacio"></span>
+      <button data-cmd="B" title="Retroceder" disabled>▼</button>
+      <span class="vacio"></span>
+    </div>
+    <button id="btn-eje" data-cmd="P" disabled>⟲ Girar en su eje</button>
+
+    <p id="estado">–</p>
+    <p id="ayuda">Mantén presionado para mover · Teclado: flechas / WASD, Q, Espacio</p>
+  </div>
+
+  <script>
+    // ── Elementos del DOM ─────────────────────────────────────────
+    const elConexion = document.getElementById('conexion');
+    const elEstado   = document.getElementById('estado');
+    const botones    = document.querySelectorAll('button[data-cmd]');
+
+    const NOMBRES = {
+      F: 'Avanzando',
+      B: 'Retrocediendo',
+      L: 'Girando a la izquierda',
+      R: 'Girando a la derecha',
+      P: 'Girando en su eje',
+      S: 'Detenido'
+    };
+
+    // Teclas → comandos
+    const TECLAS = {
+      ArrowUp: 'F',    w: 'F', W: 'F',
+      ArrowDown: 'B',  s: 'B', S: 'B',
+      ArrowLeft: 'L',  a: 'L', A: 'L',
+      ArrowRight: 'R', d: 'R', D: 'R',
+      q: 'P', Q: 'P',
+      ' ': 'S'
+    };
+
+    // Mientras un botón está presionado, el comando se reenvía cada
+    // REPETIR_MS. El ESP32 detiene el robot si deja de recibirlo
+    // (ver TIEMPO_SEGURIDAD_MS en el sketch).
+    const REPETIR_MS = 200;
+
+    let socket;
+    let reintento = 1000;     // Retardo inicial de reconexión (ms)
+    let cmdActivo = null;     // Comando que se está manteniendo
+    let temporizador = null;
+
+    // ── Envío de comando al ESP32 ─────────────────────────────────
+    function enviar(cmd) {
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(cmd);
+      }
+    }
+
+    function marcarBoton(cmd) {
+      botones.forEach(b => b.classList.toggle('activo', b.dataset.cmd === cmd));
+    }
+
+    // ── Empezar a mover (botón presionado) ───────────────────────
+    function iniciar(cmd) {
+      if (cmd === 'S') { soltar(); return; }
+      if (cmdActivo === cmd) return;
+      clearInterval(temporizador);
+      cmdActivo = cmd;
+      enviar(cmd);
+      temporizador = setInterval(() => enviar(cmd), REPETIR_MS);
+      marcarBoton(cmd);
+    }
+
+    // ── Detener (botón soltado) ──────────────────────────────────
+    function soltar() {
+      clearInterval(temporizador);
+      temporizador = null;
+      cmdActivo = null;
+      enviar('S');
+      marcarBoton(null);
+    }
+
+    // ── Eventos de puntero (sirven para mouse y pantalla táctil) ─
+    botones.forEach(btn => {
+      const cmd = btn.dataset.cmd;
+      btn.addEventListener('pointerdown', e => {
+        e.preventDefault();
+        btn.setPointerCapture(e.pointerId);
+        iniciar(cmd);
+      });
+      ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(ev =>
+        btn.addEventListener(ev, () => { if (cmdActivo === cmd) soltar(); })
+      );
+      btn.addEventListener('contextmenu', e => e.preventDefault());
+    });
+
+    // ── Teclado ───────────────────────────────────────────────────
+    document.addEventListener('keydown', e => {
+      const cmd = TECLAS[e.key];
+      if (!cmd) return;
+      e.preventDefault();
+      if (!e.repeat) iniciar(cmd);
+    });
+    document.addEventListener('keyup', e => {
+      const cmd = TECLAS[e.key];
+      if (cmd && cmd === cmdActivo) soltar();
+    });
+
+    // Detener si la ventana pierde el foco o la pestaña se oculta
+    window.addEventListener('blur', () => { if (cmdActivo) soltar(); });
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && cmdActivo) soltar();
+    });
+
+    // ── Conexión WebSocket ────────────────────────────────────────
+    const WS_URL = `ws://${location.host}/ws`;
+
+    function habilitarBotones(activo) {
+      botones.forEach(b => b.disabled = !activo);
+    }
+
+    function conectar() {
+      socket = new WebSocket(WS_URL);
+
+      socket.onopen = () => {
+        elConexion.textContent = '● Conectado';
+        elConexion.className   = 'ok';
+        habilitarBotones(true);
+        reintento = 1000;
+      };
+
+      socket.onclose = () => {
+        elConexion.textContent = '● Desconectado – reconectando...';
+        elConexion.className   = '';
+        clearInterval(temporizador);
+        temporizador = null;
+        cmdActivo = null;
+        marcarBoton(null);
+        habilitarBotones(false);
+        // Reconexión automática con retardo exponencial (máx. 8 s)
+        setTimeout(conectar, reintento);
+        reintento = Math.min(reintento * 2, 8000);
+      };
+
+      socket.onerror = (e) => console.error('WS error:', e);
+
+      socket.onmessage = (e) => {
+        if (e.data.startsWith('MOV:')) {
+          const mov = e.data.charAt(4);
+          elEstado.textContent = NOMBRES[mov] || mov;
+        } else if (e.data.startsWith('ERR:')) {
+          elEstado.textContent = e.data.substring(4);
+        }
+      };
+    }
+
+    // ── Iniciar conexión al cargar la página ─────────────────────
+    conectar();
+  </script>
+</body>
+</html>

@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<!--
+  data/index.html  –  Práctica 1: Control de LED
+  Guardar este archivo en la carpeta /data del sketch de Arduino.
+  Cargarlo al ESP32 (Arduino IDE 2.x) con:
+    Ctrl+Shift+P → "Upload LittleFS to Pico/ESP8266/ESP32"
+  (Cerrar el Monitor Serial antes de subir.)
+-->
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Control LED – ESP32 Práctica 1</title>
+  <style>
+    /* ── Variables de color ──────────────────────────────────────── */
+    :root {
+      --bg:       #1a1a2e;
+      --card:     #16213e;
+      --verde:    #4caf50;
+      --rojo:     #f44336;
+      --texto:    #eaeaea;
+      --gris:     #999;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--texto);
+      font-family: 'Segoe UI', Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 2rem;
+    }
+
+    h1 { font-size: 1.8rem; margin-bottom: 0.5rem; }
+
+    /* ── Indicador de conexión WebSocket ────────────────────────── */
+    #conexion {
+      font-size: 0.9rem;
+      color: var(--rojo);
+      margin-bottom: 2rem;
+      transition: color 0.3s;
+    }
+    #conexion.ok { color: var(--verde); }
+
+    /* ── Tarjeta de control ─────────────────────────────────────── */
+    .card {
+      background: var(--card);
+      border-radius: 16px;
+      padding: 2rem;
+      text-align: center;
+      width: 100%;
+      max-width: 340px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    }
+
+    /* ── Indicador visual del LED ────────────────────────────────── */
+    #led-visual {
+      width: 80px; height: 80px;
+      border-radius: 50%;
+      background: #333;
+      margin: 0 auto 1.5rem;
+      transition: background 0.3s, box-shadow 0.3s;
+      border: 3px solid #555;
+    }
+    #led-visual.encendido {
+      background: #ffeb3b;
+      box-shadow: 0 0 30px 10px rgba(255,235,59,0.5);
+      border-color: #fbc02d;
+    }
+
+    /* ── Botones de control ─────────────────────────────────────── */
+    .botones { display: flex; gap: 1rem; justify-content: center; }
+
+    button {
+      padding: 14px 28px;
+      font-size: 1.1rem;
+      font-weight: bold;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: transform 0.1s, opacity 0.2s;
+    }
+    button:active { transform: scale(0.95); }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    #btn-on  { background: var(--verde); color: white; }
+    #btn-off { background: var(--rojo);  color: white; }
+
+    /* ── Estado textual ─────────────────────────────────────────── */
+    #estado {
+      margin-top: 1.2rem;
+      font-size: 1rem;
+      color: var(--gris);
+      min-height: 1.4em;
+    }
+  </style>
+</head>
+<body>
+  <h1>Control de LED</h1>
+  <p id="conexion">● Conectando...</p>
+
+  <div class="card">
+    <div id="led-visual"></div>
+    <div class="botones">
+      <!-- Deshabilitados hasta que el WebSocket se conecte -->
+      <button id="btn-on"  onclick="enviar('ON')"  disabled>Encender</button>
+      <button id="btn-off" onclick="enviar('OFF')" disabled>Apagar</button>
+    </div>
+    <p id="estado">–</p>
+  </div>
+
+  <script>
+    // ── Elementos del DOM ─────────────────────────────────────────
+    const elConexion  = document.getElementById('conexion');
+    const elEstado    = document.getElementById('estado');
+    const elLedVisual = document.getElementById('led-visual');
+    const btnOn       = document.getElementById('btn-on');
+    const btnOff      = document.getElementById('btn-off');
+
+    // ── Conexión WebSocket ────────────────────────────────────────
+    // location.host toma la IP del ESP32 (y el puerto, si no es 80)
+    const WS_URL = `ws://${location.host}/ws`;
+    let socket;
+    let reintento = 1000;   // Retardo inicial de reconexión (ms)
+
+    function habilitarBotones(activo) {
+      btnOn.disabled  = !activo;
+      btnOff.disabled = !activo;
+    }
+
+    function conectar() {
+      socket = new WebSocket(WS_URL);
+
+      socket.onopen = () => {
+        elConexion.textContent = '● Conectado';
+        elConexion.className   = 'ok';
+        habilitarBotones(true);
+        reintento = 1000;   // Reiniciar retardo al reconectar
+      };
+
+      socket.onclose = () => {
+        elConexion.textContent = '● Desconectado – reconectando...';
+        elConexion.className   = '';
+        habilitarBotones(false);
+        // Reconexión automática con retardo exponencial (máx. 8 s)
+        setTimeout(conectar, reintento);
+        reintento = Math.min(reintento * 2, 8000);
+      };
+
+      socket.onerror = (e) => console.error('WS error:', e);
+
+      socket.onmessage = (e) => {
+        // Mostrar el mensaje recibido
+        elEstado.textContent = e.data;
+        // Actualizar el LED visual solo con mensajes de estado
+        // ("LED ENCENDIDO" / "LED APAGADO"), no con mensajes de error
+        if (e.data.startsWith('LED ')) {
+          elLedVisual.classList.toggle('encendido',
+                                       e.data.includes('ENCENDIDO'));
+        }
+      };
+    }
+
+    // ── Envío de comando al ESP32 ─────────────────────────────────
+    function enviar(cmd) {
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(cmd);
+      }
+    }
+
+    // ── Iniciar conexión al cargar la página ─────────────────────
+    conectar();
+  </script>
+</body>
+</html>
